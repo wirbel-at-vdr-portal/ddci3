@@ -1,0 +1,76 @@
+VDR Plugin 'ddci3' Revision History
+----------------------------------
+
+INITIAL VERSION:
+================================================================================
+- fork from Jasmin Jessich's wonderful ddci2 Plugin. Thank you, Jasmin!
+  For details, please visit   https://github.com/jasmin-j/vdr-plugin-ddci2
+
+- If ddci2 works smoothly for you, pls stick to original authors source!
+  Only users where ddci2 stucks on VDR startup should spend more time.
+
+- bug hunting: why the heck does the Digital Devices CI adapter doesn't startup
+  correctly on nearly half of VDR starts?? *this* is the only reason for this
+  fork. Goal of this fork:
+  1. fix CI startup.
+  2. if 1. is not possible, restart VDR process automatically if CI doesnt
+     respond.
+
+
+2021.01.07_09h22:
+================================================================================
+
+- refactor everything to understand Jasmin Jessich's Plugin. As it's working
+  with different threads, thats quite difficult, therefore..
+  * keep license as the original authors choice! GPL v2
+  * Any class and it's name has changed. Give it names that i can understand.
+  * Filenames have changed. Give it names that i can remember.
+  * remove macros as much as possible. force users to use new VDR Versions
+    with MTD support. No need for old VDR versions anymore.
+    Simplify code reading for this plugin.
+  * refactor plugins logging facility - keeping it simpler.
+  * restart README, HISTORY files, as many thing have changed. :(
+
+
+- refactor main plugin class, split into Initialisation() and Start(),
+  also refactor DD CI device search
+
+- new file: as part of device search, FileList.h taken from my easyvdr VDR
+  Plugin (same license, GPL v2) was added.
+
+- force VDR process to die, if CI/CAM in unaccessible and dead state.
+  -> if so, the kernel driver stopped working completely. Any further write
+     access to device is answered badly.
+  -> this requires YOU as user, to restart the VDR process as soon as possible,
+     it it dies at all. Unfortunally, there's now other way to recover the
+     functionality of the CI/CAM
+  -> if VDR dies and restarts by runvdr or similar, no longer recordings are
+     missing and encrypted channels for live tv or recordings are just working
+     fine.
+
+- i put all the original sources 1:1 into new folder 'ddci2' as reference for
+  you. You may try to compare to my refactored code, if neccessary. This also
+  enshures, that the originals authors code is saved in a second place. You may
+  also want to read the originals authors README and HISTORY files.
+
+- different commandline options as ddci2. I needed it for debugging.
+  - new option:       --debug-buffers    debug RingBuffer sizes
+  - new option:       -L, --local        log to /var/log/ddci3.log instead of syslog
+  - removed option:   -d  --debugmask    Bitmask to enable special debug logging
+
+
+2021.01.23:
+================================================================================
+- Plugin works for me like a charm, time to share.
+
+- rework copyright hints
+
+- no further changes.
+
+- increase version, as files have new dates.
+
+- as the plugin now *seriously* changed, i release it under a different name,
+  because it *will* behave differently on startup and don't want to screw up
+  anything. It shows *different* debug messages, not comparable to original
+  source. And i don't want the original author to be bothered with changes i
+  did..

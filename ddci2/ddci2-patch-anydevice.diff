@@ -1,0 +1,191 @@
+# This patch to the ddci2 plugin (https://github.com/jasmin-j/vdr-plugin-ddci2)
+# enables it to assign the CAMs to any device at runtime.
+# Klaus.Schmidinger@tvdr.de
+--- ddci2.cpp	2014-04-11 17:59:08.000000000 +0200
++++ ddci2.cpp	2017-01-06 17:35:02.765347335 +0100
+@@ -289,29 +289,26 @@
+ 	L_INF( "plugin version %s initializing (VDR %s)", VERSION, VDRVERSION );
+ 
+ 	if (FindDdCi()) {
+-		for (int i = 0; i < cDevice::NumDevices(); i++) {
+-			cDevice *device = cDevice::GetDevice( i );
+-			// no CAM assigned?
+-			if (device && (device->CamSlot() == NULL)) {
+-				int adapter, ci;
+-				if (GetDdCi( adapter, ci )) {
+-					int ca_fd = CiDevOpen( DEV_DVB_CA, adapter, ci, O_RDWR );
+-					int ci_fdw = CiDevOpen( DEV_DVB_CI, adapter, ci, O_WRONLY );
+-					int ci_fdr = CiDevOpen( DEV_DVB_CI, adapter, ci, O_RDONLY | O_NONBLOCK );
+-					if ((ca_fd >= 0) && (ci_fdw >= 0) && (ci_fdr >= 0)) {
+-						L_INF( "Creating DdCiAdapter for device %d", device->CardIndex() );
+-
+-						cString fnameCa( CiDevName( DEV_DVB_CA, adapter, ci ) );
+-						cString fnameCi( CiDevName( DEV_DVB_CI, adapter, ci ) );
+-						adapters[ i ] = new DdCiAdapter( device, ca_fd, ci_fdw, ci_fdr, fnameCa, fnameCi );
+-					} else {
+-						L_DBG( "Fds -> ca: %d, ciw: %d, cir:%d", ca_fd, ci_fdw, ci_fdr );
+-						close( ca_fd );
+-						close( ci_fdw );
+-						close( ci_fdr );
+-					}
++		for (int i = 0; ; i++) {
++			int adapter, ci;
++			if (GetDdCi( adapter, ci )) {
++				int ca_fd = CiDevOpen( DEV_DVB_CA, adapter, ci, O_RDWR );
++				int ci_fdw = CiDevOpen( DEV_DVB_CI, adapter, ci, O_WRONLY );
++				int ci_fdr = CiDevOpen( DEV_DVB_CI, adapter, ci, O_RDONLY | O_NONBLOCK );
++				if ((ca_fd >= 0) && (ci_fdw >= 0) && (ci_fdr >= 0)) {
++					L_INF( "Creating DdCiAdapter %d/%d", adapter, ci );
++					cString fnameCa( CiDevName( DEV_DVB_CA, adapter, ci ) );
++					cString fnameCi( CiDevName( DEV_DVB_CI, adapter, ci ) );
++					adapters[ i ] = new DdCiAdapter( ca_fd, ci_fdw, ci_fdr, fnameCa, fnameCi );
++				} else {
++					L_DBG( "Fds -> ca: %d, ciw: %d, cir:%d", ca_fd, ci_fdw, ci_fdr );
++					close( ca_fd );
++					close( ci_fdw );
++					close( ci_fdr );
+ 				}
+ 			}
++			else
++				break;
+ 		}
+ 	}
+ 
+--- ddciadapter.cpp	2014-04-11 17:59:08.000000000 +0200
++++ ddciadapter.cpp	2017-01-06 17:29:58.083695507 +0100
+@@ -53,9 +53,8 @@
+ 
+ //------------------------------------------------------------------------
+ 
+-DdCiAdapter::DdCiAdapter( cDevice *dev, int ca_fd, int ci_fdw, int ci_fdr, cString &devNameCa, cString &devNameCi )
+-: device( dev )
+-, fd( ca_fd )
++DdCiAdapter::DdCiAdapter( int ca_fd, int ci_fdw, int ci_fdr, cString &devNameCa, cString &devNameCi )
++: fd( ca_fd )
+ , caDevName( devNameCa )
+ , ciSend( *this, ci_fdw, devNameCi )
+ , ciRecv( *this, ci_fdr, devNameCi )
+@@ -63,12 +62,7 @@
+ {
+ 	LOG_FUNCTION_ENTER;
+ 
+-	if (!dev) {
+-		L_ERROR_STR( "dev=NULL!" );
+-		return;
+-	}
+-
+-	SetDescription( "DDCI adapter on device %d (%s)", device->DeviceNumber(), *caDevName );
++	SetDescription( "DDCI adapter %s", *caDevName );
+ 
+ 	ca_caps_t Caps;
+ 	if (ioctl( fd, CA_GET_CAP, &Caps ) == 0) {
+@@ -82,14 +76,15 @@
+ 						L_ERR( "Currently only ONE CAM slot supported" );
+ 					}
+ 				}
+-				L_DBG( "DdCiAdapter(%s) for device %d created", *caDevName, device->DeviceNumber() );
++				L_DBG( "DdCiAdapter(%s) created", *caDevName );
+ 				Start();
+ 			} else
+-				L_ERR( "no CAM slots found on device %d", device->DeviceNumber() );
++				L_ERR( "no CAM slots found on %s", *caDevName );
+ 		} else
+-			L_INF( "device %d doesn't support CI link layer interface", device->DeviceNumber() );
+-	} else
+-		L_ERR( "can't get CA capabilities on device %d", device->DeviceNumber() );
++			L_INF( "no CI link layer interface support on %s", *caDevName );
++	}
++	else
++		L_ERR( "can't get CA capabilities on %s", *caDevName );
+ 
+ 	LOG_FUNCTION_EXIT;
+ }
+@@ -132,11 +127,11 @@
+ 		if (ciRecv.Start())
+ 			cCiAdapter::Action();
+ 		else {
+-			L_ERR( "couldn't start CAM TS Recv on device %d", device->DeviceNumber() );
++			L_ERR( "couldn't start CAM TS Recv on %s", *caDevName );
+ 			ciSend.Cancel( 3 );
+ 		}
+ 	else
+-		L_ERR( "couldn't start CAM TS Send on device %d", device->DeviceNumber() );
++		L_ERR( "couldn't start CAM TS Send on %s", *caDevName );
+ 
+ 	LOG_FUNCTION_EXIT;
+ }
+@@ -153,7 +148,7 @@
+ 			int n = safe_read( fd, Buffer, MaxLength );
+ 			if (n >= 0)
+ 				return n;
+-			L_ERR( "can't read from CI adapter on device %d: %m", device->DeviceNumber() );
++			L_ERR( "can't read from CI adapter on %s: %m", *caDevName );
+ 		}
+ 	}
+ 	return 0;
+@@ -165,7 +160,7 @@
+ {
+ 	if (Buffer && Length > 0) {
+ 		if (safe_write( fd, Buffer, Length ) != Length)
+-			L_ERR( "can't write to CI adapter on device %d: %m", device->DeviceNumber() );
++			L_ERR( "can't write to CI adapter on %s: %m", *caDevName );
+ 	}
+ }
+ 
+@@ -179,7 +174,7 @@
+ 	if (ioctl( fd, CA_RESET, 1 << Slot ) != -1)
+ 		return true;
+ 	else
+-		L_ERR( "can't reset CAM slot %d on device %d: %m", Slot, device->DeviceNumber() );
++		L_ERR( "can't reset CAM slot %d on %s: %m", Slot, *caDevName );
+ 	return false;
+ }
+ 
+@@ -195,7 +190,7 @@
+ 		else if ((sinfo.flags & CA_CI_MODULE_PRESENT) != 0)
+ 			return msPresent;
+ 	} else
+-		L_ERR( "can't get info of CAM slot %d on device %d: %m", Slot, device->DeviceNumber() );
++		L_ERR( "can't get info of CAM slot %d on %s: %m", Slot, *caDevName );
+ 	return msNone;
+ }
+ 
+@@ -203,8 +198,5 @@
+ 
+ bool DdCiAdapter::Assign( cDevice *Device, bool Query )
+ {
+-	// Currently no MTD, so we can hardwired the CI to its device
+-	if (Device)
+-		return Device == device;
+ 	return true;
+ }
+--- ddciadapter.h	2014-04-11 17:59:08.000000000 +0200
++++ ddciadapter.h	2017-01-06 11:31:10.396986260 +0100
+@@ -42,11 +42,6 @@
+ class DdCiAdapter: public cCiAdapter
+ {
+ private:
+-	/* VDR currently allows only *one* device per CI adapter. Moreover,
+-	 * it is bound in a 1:1 relation to that device, just from the
+-	 * creation.
+-	 */
+-	cDevice *device;    //< the bound device
+ 	int fd;             //< .../frontendX/caX device file handle
+ 	cString caDevName;  //< .../frontendX/caX device path
+ 	DdCiTsSend ciSend;  //< the CAM TS sender
+@@ -73,14 +68,13 @@
+ 	 * Constructor.
+ 	 * Checks for the available slots of the CAM and starts the
+ 	 * controlling thread.
+-	 * @param dev the assigned device
+ 	 * @param ca_fd the file handle for the .../frontendX/caX device
+ 	 * @param ci_fdw the write file handle for the .../frontendX/ciX device
+ 	 * @param ci_fdr the read file handle for the .../frontendX/ciX device
+ 	 * @param devNameCa the name of the device (.../frontendX/caX)
+ 	 * @param devNameCi the name of the device (.../frontendX/ciX)
+ 	 **/
+-	DdCiAdapter( cDevice *dev, int ca_fd, int ci_fdw, int ci_fdr, cString &devNameCa, cString &devNameCi );
++	DdCiAdapter( int ca_fd, int ci_fdw, int ci_fdr, cString &devNameCa, cString &devNameCi );
+ 
+ 	/// Destructor.
+ 	virtual ~DdCiAdapter();
