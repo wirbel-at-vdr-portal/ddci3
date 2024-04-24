@@ -98,8 +98,8 @@ bool cPluginDDCI3::Find(void) {
      if (cFileList(adapter, "frontend").List().size())
         continue; /* we found frontend<N> -> not a DD CI */
 
-     auto devices = std::move(cFileList(adapter, "ci").List());
-     auto secdevs = std::move(cFileList(adapter, "sec").List());
+     auto devices = cFileList(adapter, "ci").List();
+     auto secdevs = cFileList(adapter, "sec").List();
      devices.insert(devices.end(), secdevs.begin(), secdevs.end());
 
      for(auto dev:devices) {
