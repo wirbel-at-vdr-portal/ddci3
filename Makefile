@@ -24,26 +24,27 @@
 
 
 
-PLUGIN = ddci3
+
 
 
 export CFLAGS   = $(call PKGCFG,cflags)
 export CXXFLAGS = $(call PKGCFG,cxxflags)
 
-
-INCLUDES += -I.
-DEFINES += -DPLUGIN_NAME_I18N='"$(PLUGIN)"'
-
-
-SRC = $(wildcard *.cpp)
-OBJS = $(SRC:%.cpp=%.o)
-
+# uncomment next line for quiet compiler messages
+Q = @
 
 
 #/*******************************************************************************
 # * no need to touch below this line.
 # ******************************************************************************/
 
+PLUGIN = ddci3
+
+DEFINES += -DPLUGIN_NAME_I18N='"$(PLUGIN)"'
+INCLUDES += -I.
+
+SRC = $(wildcard *.cpp)
+OBJS = $(SRC:%.cpp=%.o)
 
 VERSION = $(shell grep 'static const char \*VERSION *=' $(PLUGIN).cpp | awk '{ print $$6 }' | sed -e 's/[";]//g')
 APIVERSION = $(call PKGCFG,apiversion)
@@ -74,14 +75,15 @@ all: $(SOFILE) i18n
 
 ### Implicit rules:
 %.o: %.cpp
-	$(CXX) $(CXXFLAGS) -c $(DEFINES) $(INCLUDES) -o $@ $<
+	@echo CXX $@
+	$(Q)$(CXX) $(CXXFLAGS) -c $(DEFINES) $(INCLUDES) -o $@ $<
 
 
 ### Dependencies:
 MAKEDEP = $(CXX) -MM -MG
 DEPFILE = .dependencies
 $(DEPFILE): Makefile
-	@$(MAKEDEP) $(CXXFLAGS) $(DEFINES) $(INCLUDES) $(SRC) > $@
+	$(Q)$(MAKEDEP) $(CXXFLAGS) $(DEFINES) $(INCLUDES) $(SRC) > $@
 
 -include $(DEPFILE)
 
@@ -106,7 +108,8 @@ $(I18Npot): $(wildcard *.cpp)
 	@touch $@
 
 $(I18Nmsgs): $(DESTDIR)$(LOCDIR)/%/LC_MESSAGES/vdr-$(PLUGIN).mo: $(PODIR)/%.mo
-	install -D -m644 $< $@
+	@echo IN $@
+	$(Q)install -D -m644 $< $@
 
 .PHONY: i18n
 i18n: $(I18Nmo) $(I18Npot)
@@ -120,7 +123,8 @@ $(SOFILE): $(OBJS)
 	$(Q)$(CXX) $(CXXFLAGS) $(LDFLAGS) -shared $(OBJS) -o $@
 
 install-lib: $(SOFILE)
-	install -D $^ $(DESTDIR)$(LIBDIR)/$^.$(APIVERSION)
+	@echo IN $@
+	$(Q)install -D $^ $(DESTDIR)$(LIBDIR)/$^.$(APIVERSION)
 
 install: install-lib install-i18n
 
